@@ -1051,6 +1051,64 @@ function plaatsVirusKinderen(deck) {
   return deck;
 }
 
+
+// ══════════════════════════════════════════════
+//  VIRUSSEN BEPERKEN — max 2 per ronde, nooit als eerste vraag
+// ══════════════════════════════════════════════
+const MAX_VIRUSSEN_PER_RONDE = 2;
+
+function finaliseerVirussen(deck, geselecteerd) {
+  const inDeck = new Set(deck.map(vraagId));
+  let reserve = shuffle(volledigeData.filter(item =>
+    !item.pk && !isVirusStarter(item) && geselecteerd.includes(item.p) &&
+    magGetrokkenWorden(item) && !inDeck.has(vraagId(item))
+  ));
+
+  const neemReserve = (voorkeurPack) => {
+    let i = reserve.findIndex(it => it.p === voorkeurPack);
+    if (i === -1) i = 0;
+    return reserve.length ? reserve.splice(i, 1)[0] : null;
+  };
+
+  // Verwijdert een virus-starter (+ bijhorende wegval-kaart) en vult de plekken met gewone vragen
+  const verwijderStarter = (starter) => {
+    const kindKaarten = starter.k ? deck.filter(it => it.pk === starter.k) : [];
+    [starter, ...kindKaarten].forEach(it => {
+      const idx = deck.indexOf(it);
+      if (idx === -1) return;
+      const vervanger = neemReserve(it.p);
+      if (vervanger) deck[idx] = vervanger; else deck.splice(idx, 1);
+    });
+  };
+
+  // 1) maximaal MAX_VIRUSSEN_PER_RONDE starters: de rest vervangen
+  let starters = deck.filter(isVirusStarter);
+  starters.slice(MAX_VIRUSSEN_PER_RONDE).forEach(verwijderStarter);
+
+  // 2) geen virus als allereerste vraag
+  if (deck.length && isVirusStarter(deck[0])) {
+    const starter = deck[0];
+    const kindPosities = starter.k
+      ? deck.map((it, i) => it.pk === starter.k ? i : -1).filter(i => i >= 0)
+      : [];
+    const laatsteToegestaan = deck.length > 6 ? deck.length - 7 : deck.length - 1;
+    const kandidaten = [];
+    for (let j = 1; j <= laatsteToegestaan; j++) {
+      const it = deck[j];
+      if (isVirusStarter(it) || it.pk) continue;
+      if (kindPosities.some(pos => pos < j + 4)) continue;
+      kandidaten.push(j);
+    }
+    if (kandidaten.length) {
+      const j = kandidaten[Math.floor(Math.random() * kandidaten.length)];
+      [deck[0], deck[j]] = [deck[j], deck[0]];
+    } else {
+      verwijderStarter(starter);
+    }
+  }
+  return deck;
+}
+
 // ══════════════════════════════════════════════
 //  SPEL STARTEN
 // ══════════════════════════════════════════════
@@ -1083,6 +1141,7 @@ function startSpel() {
   mainDeck = bouwDeck(geselecteerd, targetCount);
   mainDeck = voegGegarandeerdeVragenToe(mainDeck);
   mainDeck = voegGeheimeVraagToe(mainDeck);
+  mainDeck = finaliseerVirussen(mainDeck, geselecteerd);
   markeerAlsGespeeld(mainDeck);
 
   if (mainDeck.length === 0) {
@@ -1107,6 +1166,7 @@ function opnieuw() {
   mainDeck = bouwDeck(geselecteerd, targetCount);
   mainDeck = voegGegarandeerdeVragenToe(mainDeck);
   mainDeck = voegGeheimeVraagToe(mainDeck);
+  mainDeck = finaliseerVirussen(mainDeck, geselecteerd);
   markeerAlsGespeeld(mainDeck);
   mainIndex = 0;
   displayQueue = [];
@@ -1205,10 +1265,12 @@ function volgendeUitWachtrij() {
   return kaarten[0];
 }
 
-function vervangPlaceholders(tekst, sleutel, isChild) {
+function vervangPlaceholders(tekst, sleutel, isChild, vasteNamen) {
   if (!tekst) return '';
   let gemengd;
-  if (sleutel && isChild && randomisatiePerKey[sleutel]) {
+  if (vasteNamen) {
+    gemengd = vasteNamen;
+  } else if (sleutel && isChild && randomisatiePerKey[sleutel]) {
     gemengd = randomisatiePerKey[sleutel];
   } else {
     gemengd = shuffle(spelers);
@@ -1320,13 +1382,13 @@ function volgendKaart() {
     if (huidigeKaart.y === 'virus') {
       // eigen virus met vaste, numerieke duur
       actieveVirussen.push({
-        label: vervangPlaceholders(huidigeKaart.label, null, false),
-        volledigeTekst: vervangPlaceholders(huidigeKaart.t, null, false),
+        label: huidigeKaart.getoondLabel || vervangPlaceholders(huidigeKaart.label, null, false),
+        volledigeTekst: huidigeKaart.getoondeTekst || vervangPlaceholders(huidigeKaart.t, null, false),
         resterende: huidigeKaart.duur
       });
     } else if (VIRUS_TYPES.includes(huidigeKaart.y) && huidigeKaart.k) {
       // geïmporteerde regel: blijft actief tot het bijhorende kind getrokken wordt
-      const volledigeTekst = vervangPlaceholders(huidigeKaart.t, huidigeKaart.k, true);
+      const volledigeTekst = huidigeKaart.getoondeTekst || vervangPlaceholders(huidigeKaart.t, huidigeKaart.k, true);
       actieveVirussen.push({
         label: kortLabel(volledigeTekst),
         volledigeTekst: volledigeTekst,
@@ -1374,7 +1436,14 @@ function volgendKaart() {
 
   const sleutel = item.k || item.pk || null;
   const isChild = !!item.pk;
-  tekst.textContent = vervangPlaceholders(item.t, sleutel, isChild);
+  // Namen/getallen één keer vastleggen, zodat de virus-preview exact overeenkomt met de eerste keer
+  let virusNamen = null;
+  if (item.y === 'virus') {
+    virusNamen = shuffle(spelers);
+    item.getoondLabel = vervangPlaceholders(item.label, null, false, virusNamen);
+  }
+  item.getoondeTekst = vervangPlaceholders(item.t, sleutel, isChild, virusNamen);
+  tekst.textContent = item.getoondeTekst;
 
   const duurEl = document.getElementById('kaart-virus-duur');
   let duurTekst = '';
