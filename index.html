@@ -181,28 +181,43 @@
   .instellingen-label { font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; }
 
   .aantal-vragen-row { display: flex; align-items: center; gap: 14px; background: #1e1e2a; border: 1.5px solid #333; border-radius: 14px; padding: 14px 16px; }
-  .aantal-vragen-row input[type="range"] { flex: 1; accent-color: #a855f7; }
   .aantal-vragen-waarde { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; min-width: 46px; text-align: right; }
 
-  /* ── Dubbele schuifregelaar (min + max in 1 slider) voor het aantal slokken ── */
-  .slokken-slider-wrap { position: relative; flex: 1; height: 24px; display: flex; align-items: center; }
-  .slokken-slider-track { position: absolute; left: 0; right: 0; height: 4px; border-radius: 99px; background: #3a3a48; }
-  .slokken-slider-fill { position: absolute; height: 4px; border-radius: 99px; background: #a855f7; pointer-events: none; }
-  .slokken-range-input {
+  /* ── Gedeelde slider-stijl: zelfde bolgrootte en grijze achtergrondbalk voor alle sliders ── */
+  .range-slider-wrap { position: relative; flex: 1; height: 24px; display: flex; align-items: center; }
+  .range-slider-track { position: absolute; left: 0; right: 0; height: 4px; border-radius: 99px; background: #3a3a48; }
+  .range-slider-fill { position: absolute; height: 4px; border-radius: 99px; background: #a855f7; pointer-events: none; }
+  .range-thumb {
     position: absolute; left: 0; right: 0; width: 100%; margin: 0;
     -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none;
   }
-  .slokken-range-input:focus { outline: none; }
-  .slokken-range-input::-webkit-slider-runnable-track { background: transparent; height: 4px; }
-  .slokken-range-input::-moz-range-track { background: transparent; height: 4px; border: none; }
-  .slokken-range-input::-webkit-slider-thumb {
+  .range-thumb:focus { outline: none; }
+  .range-thumb::-webkit-slider-runnable-track { background: transparent; height: 4px; }
+  .range-thumb::-moz-range-track { background: transparent; height: 4px; border: none; }
+  .range-thumb::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none; pointer-events: auto;
     width: 20px; height: 20px; border-radius: 50%; background: #a855f7;
-    border: 3px solid #fff; cursor: pointer; margin-top: -8px;
+    border: none; cursor: pointer; margin-top: -8px;
   }
-  .slokken-range-input::-moz-range-thumb {
+  .range-thumb::-moz-range-thumb {
     pointer-events: auto; width: 20px; height: 20px; border-radius: 50%;
-    background: #a855f7; border: 3px solid #fff; cursor: pointer;
+    background: #a855f7; border: none; cursor: pointer;
+  }
+
+  /* Easter egg: als de slokken-slider precies 6–7 toont */
+  #slokken-confetti-canvas { position: absolute; inset: -40px -16px; width: calc(100% + 32px); height: calc(100% + 80px); pointer-events: none; overflow: visible; }
+  .slokken-waarde-easteregg { display: inline-flex; align-items: center; gap: 2px; }
+  .slokken-waarde-easteregg .six,
+  .slokken-waarde-easteregg .seven { display: inline-block; font-weight: 800; }
+  .slokken-waarde-easteregg .six { color: var(--accent-hot); animation: slokkenSeesawUp 0.9s ease-in-out infinite; }
+  .slokken-waarde-easteregg .seven { color: var(--accent-silly); animation: slokkenSeesawDown 0.9s ease-in-out infinite; }
+  @keyframes slokkenSeesawUp {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes slokkenSeesawDown {
+    0%, 100% { transform: translateY(-4px); }
+    50% { transform: translateY(0); }
   }
 
   .pack-chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -551,7 +566,11 @@
   <div class="instellingen-sectie">
     <div class="instellingen-label">Aantal vragen per ronde</div>
     <div class="aantal-vragen-row">
-      <input type="range" id="aantal-vragen-slider" min="5" max="100" step="any" value="25" oninput="updateAantalLabel()">
+      <div class="range-slider-wrap">
+        <div class="range-slider-track"></div>
+        <div class="range-slider-fill" id="aantal-vragen-slider-fill"></div>
+        <input type="range" class="range-thumb" id="aantal-vragen-slider" min="5" max="100" step="any" value="25" oninput="updateAantalLabel()">
+      </div>
       <div class="aantal-vragen-waarde" id="aantal-vragen-waarde">25</div>
     </div>
   </div>
@@ -559,11 +578,12 @@
   <div class="instellingen-sectie">
     <div class="instellingen-label">Aantal slokken per straf</div>
     <div class="aantal-vragen-row">
-      <div class="slokken-slider-wrap">
-        <div class="slokken-slider-track"></div>
-        <div class="slokken-slider-fill" id="slokken-slider-fill"></div>
-        <input type="range" class="slokken-range-input" id="slokken-min-slider" min="1" max="10" step="any" value="1" oninput="updateSlokkenSlider('min')">
-        <input type="range" class="slokken-range-input" id="slokken-max-slider" min="1" max="10" step="any" value="3" oninput="updateSlokkenSlider('max')">
+      <div class="range-slider-wrap">
+        <canvas id="slokken-confetti-canvas"></canvas>
+        <div class="range-slider-track"></div>
+        <div class="range-slider-fill" id="slokken-slider-fill"></div>
+        <input type="range" class="range-thumb" id="slokken-min-slider" min="1" max="10" step="any" value="1" oninput="updateSlokkenSlider('min')">
+        <input type="range" class="range-thumb" id="slokken-max-slider" min="1" max="10" step="any" value="3" oninput="updateSlokkenSlider('max')">
       </div>
       <div class="aantal-vragen-waarde" id="aantal-slokken-waarde">1–3</div>
     </div>
@@ -979,9 +999,20 @@ function updateAantalLabel() {
   // De slider zelf beweegt vloeiend mee met de vinger/muis; enkel de
   // getoonde (en uiteindelijk gebruikte) waarde "klikt" in stappen van 5.
   document.getElementById('aantal-vragen-waarde').textContent = geklikteAantalVragen();
+
+  // Vulbalk van links tot de bol, zelfde stijl als het lijntje tussen
+  // minimum en maximum bij de slokken-slider.
+  const slider = document.getElementById('aantal-vragen-slider');
+  const bereikMin = parseFloat(slider.min);
+  const bereikMax = parseFloat(slider.max);
+  const pct = ((parseFloat(slider.value) - bereikMin) / (bereikMax - bereikMin)) * 100;
+  const fill = document.getElementById('aantal-vragen-slider-fill');
+  fill.style.left = '0%';
+  fill.style.width = pct + '%';
 }
 
 const SLOKKEN_MIN_AFSTAND = 1; // altijd minstens 1 volledige positie tussen min en max
+let slokkenEasterEggActief = false; // voorkomt dat de 6-7-confetti bij elke sliderbeweging herstart
 
 function geklikteSlokkenRange() {
   const minEl = document.getElementById('slokken-min-slider');
@@ -1029,7 +1060,20 @@ function updateSlokkenSlider(gewijzigd) {
 
   // De getoonde waarde "klikt" per hele slok, ook al beweegt de slider vloeiend
   const { min: minKlik, max: maxKlik } = geklikteSlokkenRange();
-  document.getElementById('aantal-slokken-waarde').textContent = `${minKlik}–${maxKlik}`;
+  const waardeEl = document.getElementById('aantal-slokken-waarde');
+
+  if (minKlik === 6 && maxKlik === 7) {
+    // Easter egg: 6-7!
+    waardeEl.innerHTML = '<span class="slokken-waarde-easteregg"><span class="six">6</span>–<span class="seven">7</span></span>';
+    if (!slokkenEasterEggActief) {
+      slokkenEasterEggActief = true;
+      const confettiCanvas = document.getElementById('slokken-confetti-canvas');
+      if (confettiCanvas) requestAnimationFrame(() => launchConfetti(confettiCanvas));
+    }
+  } else {
+    waardeEl.textContent = `${minKlik}–${maxKlik}`;
+    slokkenEasterEggActief = false;
+  }
 }
 
 function telPerPack() {
