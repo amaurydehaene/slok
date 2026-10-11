@@ -182,7 +182,28 @@
 
   .aantal-vragen-row { display: flex; align-items: center; gap: 14px; background: #1e1e2a; border: 1.5px solid #333; border-radius: 14px; padding: 14px 16px; }
   .aantal-vragen-row input[type="range"] { flex: 1; accent-color: #a855f7; }
-  .aantal-vragen-waarde { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; min-width: 34px; text-align: right; }
+  .aantal-vragen-waarde { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; min-width: 46px; text-align: right; }
+
+  /* ── Dubbele schuifregelaar (min + max in 1 slider) voor het aantal slokken ── */
+  .slokken-slider-wrap { position: relative; flex: 1; height: 24px; display: flex; align-items: center; }
+  .slokken-slider-track { position: absolute; left: 0; right: 0; height: 4px; border-radius: 99px; background: #3a3a48; }
+  .slokken-slider-fill { position: absolute; height: 4px; border-radius: 99px; background: #a855f7; pointer-events: none; }
+  .slokken-range-input {
+    position: absolute; left: 0; right: 0; width: 100%; margin: 0;
+    -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none;
+  }
+  .slokken-range-input:focus { outline: none; }
+  .slokken-range-input::-webkit-slider-runnable-track { background: transparent; height: 4px; }
+  .slokken-range-input::-moz-range-track { background: transparent; height: 4px; border: none; }
+  .slokken-range-input::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; pointer-events: auto;
+    width: 20px; height: 20px; border-radius: 50%; background: #a855f7;
+    border: 3px solid #fff; cursor: pointer; margin-top: -8px;
+  }
+  .slokken-range-input::-moz-range-thumb {
+    pointer-events: auto; width: 20px; height: 20px; border-radius: 50%;
+    background: #a855f7; border: 3px solid #fff; cursor: pointer;
+  }
 
   .pack-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .pack-chip {
@@ -530,8 +551,21 @@
   <div class="instellingen-sectie">
     <div class="instellingen-label">Aantal vragen per ronde</div>
     <div class="aantal-vragen-row">
-      <input type="range" id="aantal-vragen-slider" min="5" max="100" step="5" value="25" oninput="updateAantalLabel()">
+      <input type="range" id="aantal-vragen-slider" min="5" max="100" step="any" value="25" oninput="updateAantalLabel()">
       <div class="aantal-vragen-waarde" id="aantal-vragen-waarde">25</div>
+    </div>
+  </div>
+
+  <div class="instellingen-sectie">
+    <div class="instellingen-label">Aantal slokken per straf</div>
+    <div class="aantal-vragen-row">
+      <div class="slokken-slider-wrap">
+        <div class="slokken-slider-track"></div>
+        <div class="slokken-slider-fill" id="slokken-slider-fill"></div>
+        <input type="range" class="slokken-range-input" id="slokken-min-slider" min="1" max="10" step="any" value="1" oninput="updateSlokkenSlider('min')">
+        <input type="range" class="slokken-range-input" id="slokken-max-slider" min="1" max="10" step="any" value="3" oninput="updateSlokkenSlider('max')">
+      </div>
+      <div class="aantal-vragen-waarde" id="aantal-slokken-waarde">1–3</div>
     </div>
   </div>
 
@@ -685,8 +719,8 @@ const EIGEN_VRAGEN = [
 ];
 
 // Bereik voor het willekeurige aantal strafpunten dat "$" vervangt
-const STRAF_MIN = 1;
-const STRAF_MAX = 3;
+let STRAF_MIN = 1;
+let STRAF_MAX = 3;
 
 // Hoeveel vragen minimaal er tussen elke "eigen vraag" mogen zitten
 const EIGEN_INTERVAL = 7;
@@ -933,9 +967,69 @@ function verwijderSpeler(btn) {
 // ══════════════════════════════════════════════
 //  STARTSCHERM — instellingen (aantal vragen + packs)
 // ══════════════════════════════════════════════
-function updateAantalLabel() {
+const AANTAL_VRAGEN_STAP = 5;
+
+function geklikteAantalVragen() {
   const slider = document.getElementById('aantal-vragen-slider');
-  document.getElementById('aantal-vragen-waarde').textContent = slider.value;
+  const ruw = parseFloat(slider.value);
+  return Math.round(ruw / AANTAL_VRAGEN_STAP) * AANTAL_VRAGEN_STAP;
+}
+
+function updateAantalLabel() {
+  // De slider zelf beweegt vloeiend mee met de vinger/muis; enkel de
+  // getoonde (en uiteindelijk gebruikte) waarde "klikt" in stappen van 5.
+  document.getElementById('aantal-vragen-waarde').textContent = geklikteAantalVragen();
+}
+
+const SLOKKEN_MIN_AFSTAND = 1; // altijd minstens 1 volledige positie tussen min en max
+
+function geklikteSlokkenRange() {
+  const minEl = document.getElementById('slokken-min-slider');
+  const maxEl = document.getElementById('slokken-max-slider');
+  const minKlik = Math.round(parseFloat(minEl.value));
+  const maxKlikRuw = Math.round(parseFloat(maxEl.value));
+  // Veiligheidsnet: door afronding zou de getoonde afstand ooit < 1 kunnen lijken
+  const maxKlik = Math.max(minKlik + SLOKKEN_MIN_AFSTAND, maxKlikRuw);
+  return { min: minKlik, max: Math.min(parseInt(maxEl.max, 10), maxKlik) };
+}
+
+function updateSlokkenSlider(gewijzigd) {
+  const minEl = document.getElementById('slokken-min-slider');
+  const maxEl = document.getElementById('slokken-max-slider');
+  const bereikMin = parseFloat(minEl.min);
+  const bereikMax = parseFloat(minEl.max);
+
+  let minRuw = parseFloat(minEl.value);
+  let maxRuw = parseFloat(maxEl.value);
+
+  // De sliders zelf blijven vloeiend bewegen; enkel de afstand tussen de twee
+  // handvaten wordt bewaakt (minstens SLOKKEN_MIN_AFSTAND), zodat het
+  // actief versleepte handvat nooit "vastklikt" tegen het andere.
+  if (gewijzigd === 'min') {
+    minRuw = Math.min(minRuw, bereikMax - SLOKKEN_MIN_AFSTAND);
+    if (minRuw > maxRuw - SLOKKEN_MIN_AFSTAND) maxRuw = minRuw + SLOKKEN_MIN_AFSTAND;
+    minEl.value = minRuw;
+    maxEl.value = maxRuw;
+  } else {
+    maxRuw = Math.max(maxRuw, bereikMin + SLOKKEN_MIN_AFSTAND);
+    if (maxRuw < minRuw + SLOKKEN_MIN_AFSTAND) minRuw = maxRuw - SLOKKEN_MIN_AFSTAND;
+    maxEl.value = maxRuw;
+    minEl.value = minRuw;
+  }
+
+  // Zorg dat het handvat dat tegen het andere "aanleunt" toch gepakt kan worden
+  minEl.style.zIndex = (minRuw >= maxRuw - SLOKKEN_MIN_AFSTAND) ? 5 : 3;
+
+  const totaal = bereikMax - bereikMin;
+  const minPct = ((minRuw - bereikMin) / totaal) * 100;
+  const maxPct = ((maxRuw - bereikMin) / totaal) * 100;
+  const fill = document.getElementById('slokken-slider-fill');
+  fill.style.left = minPct + '%';
+  fill.style.width = (maxPct - minPct) + '%';
+
+  // De getoonde waarde "klikt" per hele slok, ook al beweegt de slider vloeiend
+  const { min: minKlik, max: maxKlik } = geklikteSlokkenRange();
+  document.getElementById('aantal-slokken-waarde').textContent = `${minKlik}–${maxKlik}`;
 }
 
 function telPerPack() {
@@ -1138,6 +1232,34 @@ function finaliseerVirussen(deck, geselecteerd) {
   return deck;
 }
 
+// Eigen virussen met een vaste duur ("type: virus") krijgen hier hun
+// werkelijke duur (telkens opnieuw bepaald, maar nooit getoond tijdens het
+// spelen) en een expliciete eindkaart zodat de regel niet zomaar verdwijnt.
+const VIRUS_DUUR_MIN = 2;
+const VIRUS_DUUR_SPREIDING = 1; // willekeurige afwijking t.o.v. de basisduur
+
+function plaatsVirusEindes(deck) {
+  const starters = deck.filter(item => item.y === 'virus');
+
+  starters.forEach(starter => {
+    const basisDuur = starter.duur || 3;
+    const afwijking = Math.floor(Math.random() * (VIRUS_DUUR_SPREIDING * 2 + 1)) - VIRUS_DUUR_SPREIDING;
+    starter.duur = Math.max(VIRUS_DUUR_MIN, basisDuur + afwijking);
+
+    const starterIdx = deck.indexOf(starter);
+    if (starterIdx === -1) return;
+    const positie = Math.min(deck.length, starterIdx + starter.duur + 1);
+    deck.splice(positie, 0, {
+      t: `De regel "${starter.label}" geldt niet meer.`,
+      y: 'virus-einde',
+      p: starter.p,
+      n: 0
+    });
+  });
+
+  return deck;
+}
+
 // ══════════════════════════════════════════════
 //  SPEL STARTEN
 // ══════════════════════════════════════════════
@@ -1166,11 +1288,15 @@ function startSpel() {
 
   document.getElementById('fout-msg').textContent = '';
 
-  targetCount = parseInt(document.getElementById('aantal-vragen-slider').value, 10);
+  targetCount = geklikteAantalVragen();
+  const slokkenRange = geklikteSlokkenRange();
+  STRAF_MIN = slokkenRange.min;
+  STRAF_MAX = slokkenRange.max;
   mainDeck = bouwDeck(geselecteerd, targetCount);
   mainDeck = voegGegarandeerdeVragenToe(mainDeck);
   mainDeck = voegGeheimeVraagToe(mainDeck);
   mainDeck = finaliseerVirussen(mainDeck, geselecteerd);
+  mainDeck = plaatsVirusEindes(mainDeck);
   markeerAlsGespeeld(mainDeck);
 
   if (mainDeck.length === 0) {
@@ -1200,6 +1326,7 @@ function opnieuw() {
   mainDeck = voegGegarandeerdeVragenToe(mainDeck);
   mainDeck = voegGeheimeVraagToe(mainDeck);
   mainDeck = finaliseerVirussen(mainDeck, geselecteerd);
+  mainDeck = plaatsVirusEindes(mainDeck);
   markeerAlsGespeeld(mainDeck);
   mainIndex = 0;
   displayQueue = [];
@@ -1273,9 +1400,10 @@ function updateVirussenBar(lijst) {
   const bar = document.getElementById('virussen-bar');
   if (!bar) return;
   const weergave = lijst || actieveVirussen;
+  // Geen teller tonen: hoelang een virus nog geldt blijft onbekend tijdens het spelen.
   bar.innerHTML = weergave.map(v => {
     const isNieuw = !vorigeVirusIds.has(v._id);
-    return `<div class="virus-tag${isNieuw ? ' nieuw' : ''}"><span>${v.label}</span>${v.resterende != null ? `<span class="teller">${v.resterende}</span>` : ''}</div>`;
+    return `<div class="virus-tag${isNieuw ? ' nieuw' : ''}"><span>${v.label}</span></div>`;
   }).join('');
   vorigeVirusIds = new Set(weergave.map(v => v._id));
 }
@@ -1469,8 +1597,10 @@ function kaartVooruit() {
       actieveVirussen = actieveVirussen.filter(v => v.sleutel !== huidigeKaart.pk);
     }
   }
-  // Enkel numerieke (aftellende) virussen tikken elke beurt af — als die op 0
-  // komen, verdwijnen ze gewoon stilletjes (zonder expliciete "einde"-kaart).
+  // Enkel numerieke (aftellende) virussen tikken elke beurt af. Hun exacte
+  // duur werd bij het samenstellen van het deck bepaald (plaatsVirusEindes)
+  // en een bijhorende eindkaart staat al op de juiste plek in het deck —
+  // zo verdwijnt de regel nooit zomaar zonder dat de spelers dat merken.
   actieveVirussen = actieveVirussen
     .map(v => v.resterende != null ? { ...v, resterende: v.resterende - 1 } : v)
     .filter(v => v.resterende == null || v.resterende > 0);
@@ -1487,11 +1617,13 @@ function kaartVooruit() {
 
   const packLabel = pakketLabel(item.p);
   const isVirusKaart = item.y === 'virus' || VIRUS_TYPES.includes(item.y);
+  const isVirusEinde = item.y === 'virus-einde';
   const isTimerKaart = item.y === 'timer';
-  const packAccentWaarde = isVirusKaart ? 'var(--accent-virus)' : `var(--accent-${item.p}, var(--accent-default))`;
+  const packAccentWaarde = (isVirusKaart || isVirusEinde) ? 'var(--accent-virus)' : `var(--accent-${item.p}, var(--accent-default))`;
 
   let badgeTekst;
-  if (isVirusKaart) badgeTekst = `${packLabel} · 🦠 Virus`;
+  if (isVirusEinde) badgeTekst = `${packLabel} · 🦠 Virus voorbij`;
+  else if (isVirusKaart) badgeTekst = `${packLabel} · 🦠 Virus`;
   else if (isTimerKaart) badgeTekst = `${packLabel} · ⏱ Timer`;
   else badgeTekst = `${packLabel} · type ${item.y}`;
 
@@ -1503,11 +1635,22 @@ function kaartVooruit() {
     virusNamen = shuffle(spelers);
     item.getoondLabel = vervangPlaceholders(item.label, null, false, virusNamen);
   }
-  item.getoondeTekst = vervangPlaceholders(item.t, sleutel, isChild, virusNamen);
+
+  // Check-up: elke vraag die aan bod komt, moet een slokken-aantal bevatten.
+  // Staat er geen "$" in (de placeholder voor het aantal slokken), dan wordt
+  // die er alsnog aan toegevoegd — behalve bij timer-kaarten (eigen
+  // mechaniek) en de informatieve "regel is voorbij"-kaart.
+  let basisTekst = item.t;
+  if (!isTimerKaart && !isVirusEinde && !basisTekst.includes('$')) {
+    basisTekst = basisTekst.trim() + ' (voor $ slokken)';
+  }
+  item.getoondeTekst = vervangPlaceholders(basisTekst, sleutel, isChild, virusNamen);
 
   // Bij een vaste-duur virus ("type: virus") tonen we tijdens het spelen NIET
   // hoeveel vragen de regel nog geldig is — de regel mag gewoon stilletjes
-  // weer verdwijnen zonder dat dat van tevoren verklapt wordt.
+  // weer verdwijnen zonder dat dat van tevoren verklapt wordt. De eindkaart
+  // (virus-einde) zelf heeft geen losse duur-tekst nodig: de kaarttekst zegt
+  // al dat de regel voorbij is.
   let duurTekst = '';
   if (VIRUS_TYPES.includes(item.y)) {
     if (item.k) duurTekst = 'Blijft actief tot de regel vervalt';
@@ -1736,6 +1879,7 @@ function init() {
   });
   bouwPackChips();
   updateAantalLabel();
+  updateSlokkenSlider('min');
   initDislikeKnop();
 }
 
