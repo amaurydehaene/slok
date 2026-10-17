@@ -1811,11 +1811,51 @@ function markeerDislikeAlsVerborgen() {
   label.textContent = '✓ Komt niet meer terug';
 }
 
+// ══════════════════════════════════════════════
+//  DISLIKE-WEBHOOK (Google Apps Script: Sheet + mail)
+// ══════════════════════════════════════════════
+// Vul hier, na het deployen van het Apps Script, de "/exec"-URL van je
+// Web App in. Zolang dit op de placeholder staat, wordt er niets verstuurd
+// (en faalt er ook niets zichtbaars — het spel speelt gewoon door).
+const DISLIKE_WEBHOOK_URL = 'PLAK_HIER_JE_APPS_SCRIPT_WEB_APP_URL';
+
+function stuurDislikeNaarWebhook(kaart) {
+  if (!DISLIKE_WEBHOOK_URL || DISLIKE_WEBHOOK_URL.includes('PLAK_HIER')) return;
+
+  const payload = {
+    tijdstip: new Date().toISOString(),
+    vraag: document.getElementById('kaart-tekst').textContent,
+    vraagId: vraagId(kaart),
+    pack: pakketLabel(kaart.p),
+    packId: kaart.p,
+    type: kaart.y,
+    spelers: spelers.join(', '),
+    aantalSpelers: spelers.length,
+    ronde: `${geschiedenisIndex + 1} / ${mainDeck.length}`,
+    totaalVragenIngesteld: targetCount,
+    geselecteerdePacks: geselecteerdePacks().join(', '),
+    slokkenBereik: `${STRAF_MIN}-${STRAF_MAX}`,
+    actieveVirussen: huidigeVirusLijst().map(v => v.label).join(', ') || 'geen',
+    aantalDislikesDitRonde: dislikedDitRonde.length + 1
+  };
+
+  // Fire-and-forget: 'no-cors' zodat er geen CORS-afhandeling nodig is, en
+  // een .catch() zodat een netwerkfout het spel nooit kan onderbreken.
+  try {
+    fetch(DISLIKE_WEBHOOK_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  } catch (err) { /* stil negeren */ }
+}
+
 function bevestigDislike() {
   if (!huidigeKaart) return;
   dislikes.add(vraagId(huidigeKaart));
   opslaanDislikes(dislikes);
   dislikedDitRonde.push(document.getElementById('kaart-tekst').textContent);
+  stuurDislikeNaarWebhook(huidigeKaart);
   markeerDislikeAlsVerborgen();
 }
 
