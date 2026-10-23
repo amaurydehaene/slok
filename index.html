@@ -40,6 +40,24 @@
   /* ── SCHERMEN ── */
   .screen { display: none; height: 100dvh; flex-direction: column; align-items: center; justify-content: center; padding: 24px 24px; }
   .screen.active { display: flex; }
+  #screen-spel { position: relative; }
+
+  /* Korte visuele aanduiding (zoals Instagram stories) wanneer je teruggaat
+     naar de vorige vraag: links een donkere waas met een wit pijltje. */
+  .terug-flits {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 20%;
+    display: flex; align-items: center; justify-content: flex-start;
+    padding-left: 14px;
+    background: linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0));
+    opacity: 0; pointer-events: none; z-index: 30;
+  }
+  .terug-flits.actief { animation: terugFlitsAnim 0.4s ease; }
+  .terug-flits-pijl { color: #fff; font-size: 2.2rem; font-weight: 800; line-height: 1; }
+  @keyframes terugFlitsAnim {
+    0% { opacity: 0; }
+    30% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   #screen-start { overflow-y: auto; justify-content: flex-start; gap: 20px; padding-top: 40px; padding-bottom: 40px; }
 
   .logo {
@@ -600,6 +618,7 @@
 
 <!-- ══ SPELSCHERM ══ -->
 <div id="screen-spel" class="screen" onclick="schermTik(event)">
+  <div class="terug-flits" id="terug-flits"><span class="terug-flits-pijl">‹</span></div>
   <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
 
   <div class="virussen-bar" id="virussen-bar"></div>
@@ -739,6 +758,10 @@ const EIGEN_VRAGEN = [
 ];
 
 // Bereik voor het willekeurige aantal strafpunten dat "$" vervangt
+// Herkent of een vraagtekst al op één of andere manier een aantal slokken
+// vermeldt, ook met andere woorden dan de "$"-placeholder.
+const HEEFT_AL_SLOKKEN_VERMELDING = /\$|\bstrafpunt(en)?\b|\btrekt\b[\s\S]{0,60}?\bbinnen\b|\bnet zoveel als\b|\bslok(ken)?\b/i;
+
 let STRAF_MIN = 1;
 let STRAF_MAX = 3;
 
@@ -1681,11 +1704,14 @@ function kaartVooruit() {
   }
 
   // Check-up: elke vraag die aan bod komt, moet een slokken-aantal bevatten.
-  // Staat er geen "$" in (de placeholder voor het aantal slokken), dan wordt
-  // die er alsnog aan toegevoegd — behalve bij timer-kaarten (eigen
-  // mechaniek) en de informatieve "regel is voorbij"-kaart.
+  // Staat er nog geen vermelding van slokken in — niet enkel de "$"-placeholder,
+  // maar ook woorden/zinsneden die het al anders zeggen ("strafpunten",
+  // "trekt ... binnen", "net zoveel als", "slok(ken)") — dan wordt er alsnog
+  // "(voor $ slokken)" aan toegevoegd. Behalve bij timer-kaarten (eigen
+  // mechaniek) en de informatieve "regel is voorbij"-kaart: daar voegen we
+  // nooit iets toe aan het einde van de zin.
   let basisTekst = item.t;
-  if (!isTimerKaart && !isVirusEinde && !basisTekst.includes('$')) {
+  if (!isTimerKaart && !isVirusEinde && !HEEFT_AL_SLOKKEN_VERMELDING.test(basisTekst)) {
     basisTekst = basisTekst.trim() + ' (voor $ slokken)';
   }
   item.getoondeTekst = vervangPlaceholders(basisTekst, sleutel, isChild, virusNamen);
@@ -1723,6 +1749,18 @@ function kaartTerug() {
   if (geschiedenisIndex <= 0) return;
   geschiedenisIndex--;
   toonGeschiedenisKaart(geschiedenisIndex);
+  toonTerugFlits();
+}
+
+// Korte visuele bevestiging (links, wit pijltje op donkere waas) dat je
+// naar de vorige vraag gegaan bent — zelfde animatie elke keer, dus de
+// class eerst weghalen en de reflow forceren om ze te laten herstarten.
+function toonTerugFlits() {
+  const el = document.getElementById('terug-flits');
+  if (!el) return;
+  el.classList.remove('actief');
+  void el.offsetWidth;
+  el.classList.add('actief');
 }
 
 // Zuiver weergave-gedreven: toont een eerder opgebouwde kaart-snapshot zonder
@@ -1949,6 +1987,25 @@ function toonScherm(id) {
 }
 
 // ══════════════════════════════════════════════
+//  TOETSENBORD-NAVIGATIE (desktop): ← vorige, → volgende
+// ══════════════════════════════════════════════
+function initToetsenbordNavigatie() {
+  document.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    const spelScherm = document.getElementById('screen-spel');
+    if (!spelScherm || !spelScherm.classList.contains('active')) return;
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      kaartTerug();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      kaartVooruit();
+    }
+  });
+}
+
+// ══════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════
 function init() {
@@ -1965,6 +2022,7 @@ function init() {
   updateAantalLabel();
   updateSlokkenSlider('min');
   initDislikeKnop();
+  initToetsenbordNavigatie();
 }
 
 init();
