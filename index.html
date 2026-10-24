@@ -1305,17 +1305,30 @@ function finaliseerVirussen(deck, geselecteerd) {
 const VIRUS_DUUR_MIN = 2;
 const VIRUS_DUUR_SPREIDING = 1; // willekeurige afwijking t.o.v. de basisduur
 
+const VIRUS_MIN_KAARTEN_NA_EINDE = 3; // nooit de afsluiter; altijd nog minstens dit veel kaarten erna
+
 function plaatsVirusEindes(deck) {
   const starters = deck.filter(item => item.y === 'virus');
 
   starters.forEach(starter => {
     const basisDuur = starter.duur || 3;
     const afwijking = Math.floor(Math.random() * (VIRUS_DUUR_SPREIDING * 2 + 1)) - VIRUS_DUUR_SPREIDING;
-    starter.duur = Math.max(VIRUS_DUUR_MIN, basisDuur + afwijking);
+    const gewensteDuur = Math.max(VIRUS_DUUR_MIN, basisDuur + afwijking);
 
     const starterIdx = deck.indexOf(starter);
     if (starterIdx === -1) return;
-    const positie = Math.min(deck.length, starterIdx + starter.duur + 1);
+
+    // De eindkaart mag nooit de afsluiter van de ronde zijn en er moeten
+    // altijd nog minstens VIRUS_MIN_KAARTEN_NA_EINDE gewone kaarten op volgen.
+    // Dat bereiken we door zo nodig de duur zelf in te korten (in plaats van
+    // enkel de positie te klemmen) — anders lopen de aftelling (resterende,
+    // onzichtbaar voor de spelers) en de eindkaart uit sync, en komt de
+    // eindkaart bovendien telkens op exact dezelfde (laatste) plek terecht.
+    const maxDuurVoorRuimte = (deck.length - VIRUS_MIN_KAARTEN_NA_EINDE) - starterIdx - 1;
+    const werkelijkeDuur = Math.max(1, Math.min(gewensteDuur, maxDuurVoorRuimte));
+    starter.duur = werkelijkeDuur;
+
+    const positie = Math.min(deck.length, starterIdx + werkelijkeDuur + 1);
     deck.splice(positie, 0, {
       t: `De regel "${starter.label}" geldt niet meer.`,
       y: 'virus-einde',
@@ -1684,7 +1697,10 @@ function kaartVooruit() {
 
   const packLabel = pakketLabel(item.p);
   const isVirusKaart = item.y === 'virus' || VIRUS_TYPES.includes(item.y);
-  const isVirusEinde = item.y === 'virus-einde';
+  // Een "einde"-kaart is zowel onze eigen synthetische virus-einde kaart als
+  // de bestaande "wegval"-kaart van een ingevoerde regel (VIRUS_TYPES met .pk,
+  // bv. "je bevriest niet meer") — bij allebei mag de check-up niets toevoegen.
+  const isVirusEinde = item.y === 'virus-einde' || (VIRUS_TYPES.includes(item.y) && !!item.pk);
   const isTimerKaart = item.y === 'timer';
   const packAccentWaarde = (isVirusKaart || isVirusEinde) ? 'var(--accent-virus)' : `var(--accent-${item.p}, var(--accent-default))`;
 
